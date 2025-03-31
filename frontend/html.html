@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Air Quality Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .gauge { height: 200px; }
+        .alert-pulse { animation: pulse 1.5s infinite; }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container mt-4">
+        <div class="row">
+            <!-- Real-time Values -->
+            <div class="col-md-4 mb-4">
+                <div class="card shadow">
+                    <div class="card-header bg-primary text-white">
+                        <h5>Current Readings</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="co2-value" class="fs-1 fw-bold text-primary">0 ppm</div>
+                        <hr>
+                        <div id="pm-value" class="fs-1 fw-bold text-warning">0 µg/m³</div>
+                        <hr>
+                        <div id="voc-value" class="fs-1 fw-bold text-danger">0.0 ppm</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trends Chart -->
+            <div class="col-md-8">
+                <div class="card shadow">
+                    <div class="card-header bg-success text-white">
+                        <h5>Air Quality Trends</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alerts -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card border-danger shadow">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0">System Alerts</h5>
+                    </div>
+                    <div id="alerts" class="card-body">
+                        <!-- Alerts appear here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Chart
+        const ctx = document.getElementById('trendChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'CO2 (ppm)', data: [], borderColor: '#007bff' },
+                    { label: 'PM2.5 (µg/m³)', data: [], borderColor: '#ffc107' },
+                    { label: 'VOC (ppm)', data: [], borderColor: '#dc3545' }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        // Update dashboard every 2 seconds
+        async function updateData() {
+            try {
+                const response = await fetch('/api/sensor-data/');
+                const data = await response.json();
+
+                // Update current values
+                document.getElementById('co2-value').textContent = `${data.co2} ppm`;
+                document.getElementById('pm-value').textContent = `${data.particulate_matter} µg/m³`;
+                document.getElementById('voc-value').textContent = `${data.voc.toFixed(2)} ppm`;
+
+                // Update chart
+                const now = new Date().toLocaleTimeString();
+                chart.data.labels.push(now);
+                if(chart.data.labels.length > 15) chart.data.labels.shift();
+                
+                chart.data.datasets[0].data.push(data.co2);
+                if(chart.data.datasets[0].data.length > 15) chart.data.datasets[0].data.shift();
+                
+                chart.data.datasets[1].data.push(data.particulate_matter);
+                if(chart.data.datasets[1].data.length > 15) chart.data.datasets[1].data.shift();
+                
+                chart.data.datasets[2].data.push(data.voc);
+                if(chart.data.datasets[2].data.length > 15) chart.data.datasets[2].data.shift();
+                
+                chart.update();
+
+                // Update alerts
+                const alertsDiv = document.getElementById('alerts');
+                alertsDiv.innerHTML = '';
+                
+                if(data.co2 > 1000) {
+                    alertsDiv.innerHTML += `
+                        <div class="alert alert-danger alert-pulse">
+                            🚨 High CO2 (${data.co2}ppm)! Ventilation activated
+                        </div>
+                    `;
+                }
+                if(data.particulate_matter > 35) {
+                    alertsDiv.innerHTML += `
+                        <div class="alert alert-warning alert-pulse">
+                            ⚠️ High PM2.5 (${data.particulate_matter}µg/m³)! Purifier ON
+                        </div>
+                    `;
+                }
+                if(data.voc > 0.5) {
+                    alertsDiv.innerHTML += `
+                        <div class="alert alert-info alert-pulse">
+                            ⚠️ High VOC (${data.voc.toFixed(2)}ppm)! Opening windows
+                        </div>
+                    `;
+                }
+
+            } catch(error) {
+                console.error('Error:', error);
+            }
+        }
+
+        // Update every 2 seconds
+        setInterval(updateData, 2000);
+        updateData(); // Initial call
+    </script>
+</body>
+</html>
